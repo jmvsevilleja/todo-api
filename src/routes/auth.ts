@@ -1,146 +1,72 @@
-import { Router, Request, Response } from 'express';
-import bcrypt from 'bcryptjs';
+import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
-import { generateToken } from '../utils/jwt';
-import { registerSchema, loginSchema } from '../utils/validation';
-import { ApiResponse } from '../types';
+import { AuthService } from '../services/AuthService';
+import { UserService } from '../services/UserService';
+import { registerSchema, loginSchema, validateBody } from '../utils/validation';
+import { asyncHandler } from '../middleware/errorHandler';
+import { ApiResponse, AuthResponseDto } from '../types';
 
 const router = Router();
 const prisma = new PrismaClient();
+const userService = new UserService(prisma);
+const authService = new AuthService(userService);
 
-// Register
-router.post('/register', async (req: Request, res: Response): Promise<void> => {
-  try {
-    const validatedData = registerSchema.parse(req.body);
-    const { email, password, name } = validatedData;
+// Register endpoint with enhanced type safety
+router.post('/register', 
+  validateBody(registerSchema),
+  asyncHandler(async (req, res): Promise<void> => {
+    const authResponse = await authService.register(req.body);
 
-    // Check if user already exists
-    const existingUser = await prisma.user.findUnique({
-      where: { email }
-    });
-
-    if (existingUser) {
-      res.status(400).json({
-        success: false,
-        error: 'User with this email already exists'
-      } as ApiResponse);
-      return;
-    }
-
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, 12);
-
-    // Create user
-    const user = await prisma.user.create({
-      data: {
-        email,
-        password: hashedPassword,
-        name
-      },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        createdAt: true
-      }
-    });
-
-    // Generate JWT token
-    const token = generateToken({
-      userId: user.id,
-      email: user.email
-    });
-
-    res.status(201).json({
+    const response: ApiResponse<AuthResponseDto> = {
       success: true,
-      data: {
-        user,
-        token
-      },
+      data: authResponse,
       message: 'User registered successfully'
-    } as ApiResponse);
-  } catch (error: any) {
-    if (error.name === 'ZodError') {
-      res.status(400).json({
-        success: false,
-        error: 'Validation error',
-        data: error.errors
-      } as ApiResponse);
-      return;
-    }
+    };
 
-    console.error('Registration error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Internal server error'
-    } as ApiResponse);
-  }
-});
+    res.status(201).json(response);
+  })
+);
 
-// Login
-router.post('/login', async (req: Request, res: Response): Promise<void> => {
-  try {
-    const validatedData = loginSchema.parse(req.body);
-    const { email, password } = validatedData;
+// Login endpoint with enhanced type safety
+router.post('/login',
+  validateBody(loginSchema),
+  asyncHandler(async (req, res): Promise<void> => {
+    const authResponse = await authService.login(req.body);
 
-    // Find user
-    const user = await prisma.user.findUnique({
-      where: { email }
-    });
-
-    if (!user) {
-      res.status(401).json({
-        success: false,
-        error: 'Invalid credentials'
-      } as ApiResponse);
-      return;
-    }
-
-    // Check password
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-
-    if (!isPasswordValid) {
-      res.status(401).json({
-        success: false,
-        error: 'Invalid credentials'
-      } as ApiResponse);
-      return;
-    }
-
-    // Generate JWT token
-    const token = generateToken({
-      userId: user.id,
-      email: user.email
-    });
-
-    res.json({
+    const response: ApiResponse<AuthResponseDto> = {
       success: true,
-      data: {
-        user: {
-          id: user.id,
-          email: user.email,
-          name: user.name
-        },
-        token
-      },
+      data: authResponse,
       message: 'Login successful'
-    } as ApiResponse);
-  } catch (error: any) {
-    if (error.name === 'ZodError') {
-      res.status(400).json({
+    };
+
+    res.json(response);
+  })
+);
+
+// Token verification endpoint
+router.get('/verify',
+  asyncHandler(async (req, res): Promise<void> => {
+    const authHeader = req.headers.authorization;
+    const token = authHeader && authHeader.split(' ')[1];
+
+    if (!token) {
+      res.status(401).json({
         success: false,
-        error: 'Validation error',
-        data: error.errors
-      } as ApiResponse);
+        error: 'Access token required'
+      });
       return;
     }
 
-    console.error('Login error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Internal server error'
-    } as ApiResponse);
-  }
-});
+    const user = await authService.verifyToken(token);
+
+    const response: ApiResponse = {
+      success: true,
+      data: { user },
+      message: 'Token is valid'
+    };
+
+    res.json(response);
+  })
+);
 
 export default router;

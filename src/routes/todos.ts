@@ -1,272 +1,162 @@
-import { Router, Request, Response } from 'express';
+import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
+import { TodoService } from '../services/TodoService';
 import { authenticateToken } from '../middleware/auth';
-import { createTodoSchema, updateTodoSchema } from '../utils/validation';
-import { ApiResponse } from '../types';
+import { 
+  createTodoSchema, 
+  updateTodoSchema, 
+  todoQuerySchema,
+  validateBody, 
+  validateQuery 
+} from '../utils/validation';
+import { asyncHandler } from '../middleware/errorHandler';
+import { 
+  ApiResponse, 
+  TodoResponseDto, 
+  PaginatedResponse,
+  TodoQueryParams 
+} from '../types';
 
 const router = Router();
 const prisma = new PrismaClient();
+const todoService = new TodoService(prisma);
 
 // Apply authentication middleware to all routes
 router.use(authenticateToken);
 
-// Get all todos for authenticated user
-router.get('/', async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { completed, priority } = req.query;
+// Get all todos with enhanced filtering and pagination
+router.get('/',
+  validateQuery(todoQuerySchema),
+  asyncHandler(async (req, res): Promise<void> => {
     const userId = req.user!.id;
+    const queryParams = req.query as TodoQueryParams;
 
-    const where: any = { userId };
+    const result = await todoService.getTodos(userId, queryParams);
+    res.json(result);
+  })
+);
 
-    if (completed !== undefined) {
-      where.completed = completed === 'true';
-    }
-
-    if (priority && typeof priority === 'string') {
-      where.priority = priority.toUpperCase();
-    }
-
-    const todos = await prisma.todo.findMany({
-      where,
-      orderBy: [
-        { completed: 'asc' },
-        { createdAt: 'desc' }
-      ]
-    });
-
-    res.json({
-      success: true,
-      data: todos
-    } as ApiResponse);
-  } catch (error) {
-    console.error('Get todos error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Internal server error'
-    } as ApiResponse);
-  }
-});
-
-// Get single todo
-router.get('/:id', async (req: Request, res: Response): Promise<void> => {
-  try {
+// Get single todo with type safety
+router.get('/:id',
+  asyncHandler(async (req, res): Promise<void> => {
     const { id } = req.params;
     const userId = req.user!.id;
 
-    const todo = await prisma.todo.findFirst({
-      where: {
-        id,
-        userId
-      }
-    });
+    const todo = await todoService.getTodoById(userId, id);
 
-    if (!todo) {
-      res.status(404).json({
-        success: false,
-        error: 'Todo not found'
-      } as ApiResponse);
-      return;
-    }
-
-    res.json({
+    const response: ApiResponse<TodoResponseDto> = {
       success: true,
       data: todo
-    } as ApiResponse);
-  } catch (error) {
-    console.error('Get todo error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Internal server error'
-    } as ApiResponse);
-  }
-});
-
-// Create new todo
-router.post('/', async (req: Request, res: Response): Promise<void> => {
-  try {
-    const validatedData = createTodoSchema.parse(req.body);
-    const userId = req.user!.id;
-
-    const todoData: any = {
-      ...validatedData,
-      userId
     };
 
-    if (validatedData.dueDate) {
-      todoData.dueDate = new Date(validatedData.dueDate);
-    }
+    res.json(response);
+  })
+);
 
-    const todo = await prisma.todo.create({
-      data: todoData
-    });
+// Create new todo with validation
+router.post('/',
+  validateBody(createTodoSchema),
+  asyncHandler(async (req, res): Promise<void> => {
+    const userId = req.user!.id;
+    const todo = await todoService.createTodo(userId, req.body);
 
-    res.status(201).json({
+    const response: ApiResponse<TodoResponseDto> = {
       success: true,
       data: todo,
       message: 'Todo created successfully'
-    } as ApiResponse);
-  } catch (error: any) {
-    if (error.name === 'ZodError') {
-      res.status(400).json({
-        success: false,
-        error: 'Validation error',
-        data: error.errors
-      } as ApiResponse);
-      return;
-    }
+    };
 
-    console.error('Create todo error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Internal server error'
-    } as ApiResponse);
-  }
-});
+    res.status(201).json(response);
+  })
+);
 
-// Update todo
-router.put('/:id', async (req: Request, res: Response): Promise<void> => {
-  try {
+// Update todo with validation
+router.put('/:id',
+  validateBody(updateTodoSchema),
+  asyncHandler(async (req, res): Promise<void> => {
     const { id } = req.params;
-    const validatedData = updateTodoSchema.parse(req.body);
     const userId = req.user!.id;
 
-    // Check if todo exists and belongs to user
-    const existingTodo = await prisma.todo.findFirst({
-      where: {
-        id,
-        userId
-      }
-    });
+    const todo = await todoService.updateTodo(userId, id, req.body);
 
-    if (!existingTodo) {
-      res.status(404).json({
-        success: false,
-        error: 'Todo not found'
-      } as ApiResponse);
-      return;
-    }
-
-    const updateData: any = { ...validatedData };
-
-    if (validatedData.dueDate) {
-      updateData.dueDate = new Date(validatedData.dueDate);
-    }
-
-    const todo = await prisma.todo.update({
-      where: { id },
-      data: updateData
-    });
-
-    res.json({
+    const response: ApiResponse<TodoResponseDto> = {
       success: true,
       data: todo,
       message: 'Todo updated successfully'
-    } as ApiResponse);
-  } catch (error: any) {
-    if (error.name === 'ZodError') {
-      res.status(400).json({
-        success: false,
-        error: 'Validation error',
-        data: error.errors
-      } as ApiResponse);
-      return;
-    }
+    };
 
-    console.error('Update todo error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Internal server error'
-    } as ApiResponse);
-  }
-});
+    res.json(response);
+  })
+);
 
 // Delete todo
-router.delete('/:id', async (req: Request, res: Response): Promise<void> => {
-  try {
+router.delete('/:id',
+  asyncHandler(async (req, res): Promise<void> => {
     const { id } = req.params;
     const userId = req.user!.id;
 
-    // Check if todo exists and belongs to user
-    const existingTodo = await prisma.todo.findFirst({
-      where: {
-        id,
-        userId
-      }
-    });
+    await todoService.deleteTodo(userId, id);
 
-    if (!existingTodo) {
-      res.status(404).json({
-        success: false,
-        error: 'Todo not found'
-      } as ApiResponse);
-      return;
-    }
-
-    await prisma.todo.delete({
-      where: { id }
-    });
-
-    res.json({
+    const response: ApiResponse = {
       success: true,
       message: 'Todo deleted successfully'
-    } as ApiResponse);
-  } catch (error) {
-    console.error('Delete todo error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Internal server error'
-    } as ApiResponse);
-  }
-});
+    };
+
+    res.json(response);
+  })
+);
 
 // Toggle todo completion
-router.patch('/:id/toggle', async (req: Request, res: Response): Promise<void> => {
-  try {
+router.patch('/:id/toggle',
+  asyncHandler(async (req, res): Promise<void> => {
     const { id } = req.params;
     const userId = req.user!.id;
 
-    // Check if todo exists and belongs to user
-    const existingTodo = await prisma.todo.findFirst({
-      where: {
-        id,
-        userId
-      }
-    });
+    const todo = await todoService.toggleTodoCompletion(userId, id);
 
-    if (!existingTodo) {
-      res.status(404).json({
-        success: false,
-        error: 'Todo not found'
-      } as ApiResponse);
-      return;
-    }
-
-    const todo = await prisma.todo.update({
-      where: { id },
-      data: {
-        completed: !existingTodo.completed
-      }
-    });
-
-    res.json({
+    const response: ApiResponse<TodoResponseDto> = {
       success: true,
       data: todo,
       message: `Todo marked as ${todo.completed ? 'completed' : 'pending'}`
-    } as ApiResponse);
-  } catch (error) {
-    console.error('Toggle todo error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Internal server error'
-    } as ApiResponse);
-  }
-});
+    };
+
+    res.json(response);
+  })
+);
+
+// Get todos by priority
+router.get('/priority/:priority',
+  asyncHandler(async (req, res): Promise<void> => {
+    const { priority } = req.params;
+    const userId = req.user!.id;
+
+    const todos = await todoService.getTodosByPriority(
+      userId, 
+      priority.toUpperCase() as any
+    );
+
+    const response: ApiResponse<TodoResponseDto[]> = {
+      success: true,
+      data: todos
+    };
+
+    res.json(response);
+  })
+);
+
+// Get overdue todos
+router.get('/status/overdue',
+  asyncHandler(async (req, res): Promise<void> => {
+    const userId = req.user!.id;
+    const todos = await todoService.getOverdueTodos(userId);
+
+    const response: ApiResponse<TodoResponseDto[]> = {
+      success: true,
+      data: todos
+    };
+
+    res.json(response);
+  })
+);
 
 export default router;
-
-export interface CreateTodoDto {
-  title: string;
-  description?: string;
-  dueDate?: string;
-  priority?: 'LOW' | 'MEDIUM' | 'HIGH';
-}

@@ -1,6 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
-import { verifyToken } from '../utils/jwt';
-import { AuthUser } from '../types';
+import { AuthService } from '../services/AuthService';
+import { UserService } from '../services/UserService';
+import { PrismaClient } from '@prisma/client';
+import { AuthUser, AuthenticationError } from '../types';
+import { asyncHandler } from './errorHandler';
 
 declare global {
   namespace Express {
@@ -10,33 +13,37 @@ declare global {
   }
 }
 
-export const authenticateToken = (
-  req: Request,
-  res: Response,
-  next: NextFunction
-): void => {
-  const authHeader = req.headers.authorization;
-  const token = authHeader && authHeader.split(' ')[1];
+// Dependency injection setup
+const prisma = new PrismaClient();
+const userService = new UserService(prisma);
+const authService = new AuthService(userService);
 
-  if (!token) {
-    res.status(401).json({
-      success: false,
-      error: 'Access token required'
-    });
-    return;
-  }
+export const authenticateToken = asyncHandler(
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const authHeader = req.headers.authorization;
+    const token = authHeader && authHeader.split(' ')[1];
 
-  try {
-    const decoded = verifyToken(token);
-    req.user = {
-      id: decoded.userId,
-      email: decoded.email
-    };
+    if (!token) {
+      throw new AuthenticationError('Access token required');
+    }
+
+    const user = await authService.verifyToken(token);
+    req.user = user;
     next();
-  } catch (error) {
-    res.status(403).json({
-      success: false,
-      error: 'Invalid or expired token'
-    });
   }
+);
+
+// Role-based authorization middleware (for future use)
+export const authorize = (...roles: string[]) => {
+  return asyncHandler(
+    async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+      if (!req.user) {
+        throw new AuthenticationError('Authentication required');
+      }
+
+      // This would require adding roles to the user model
+      // For now, we'll just pass through
+      next();
+    }
+  );
 };
