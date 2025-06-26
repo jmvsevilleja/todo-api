@@ -18,7 +18,7 @@ export interface JwtConfig {
 
 export interface ServerConfig {
   port: number;
-  nodeEnv: 'development' | 'production' | 'test';
+  nodeEnv: "development" | "production" | "test";
   corsOrigins: string[];
   rateLimitWindowMs: number;
   rateLimitMaxRequests: number;
@@ -36,7 +36,7 @@ export interface RedisConfig {
 }
 
 export interface EmailConfig {
-  provider: 'smtp' | 'sendgrid' | 'ses';
+  provider: "smtp" | "sendgrid" | "ses";
   apiKey?: string;
   from: string;
   templates?: {
@@ -47,7 +47,7 @@ export interface EmailConfig {
 }
 
 export interface StorageConfig {
-  provider: 'local' | 's3' | 'gcs';
+  provider: "local" | "s3" | "gcs";
   bucket?: string;
   region?: string;
   accessKey?: string;
@@ -72,7 +72,7 @@ export interface AppConfig {
 
 // Environment validation schema
 export interface EnvVars {
-  NODE_ENV: 'development' | 'production' | 'test';
+  NODE_ENV: "development" | "production" | "test";
   PORT: string;
   DATABASE_URL: string;
   JWT_SECRET: string;
