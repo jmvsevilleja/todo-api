@@ -1,12 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { 
-  AppError, 
-  ValidationError, 
-  AuthenticationError, 
-  AuthorizationError, 
-  NotFoundError,
-  isAppError 
-} from '../types';
+import { isAppError } from '../types';
 import { config } from '../config';
 
 export const errorHandler = (
@@ -33,30 +26,21 @@ export const errorHandler = (
     return;
   }
 
-  // Handle Prisma errors
-  if (error.name === 'PrismaClientKnownRequestError') {
-    const prismaError = error as any;
-    
-    switch (prismaError.code) {
-      case 'P2002':
-        res.status(400).json({
-          success: false,
-          error: 'A record with this information already exists'
-        });
-        return;
-      case 'P2025':
-        res.status(404).json({
-          success: false,
-          error: 'Record not found'
-        });
-        return;
-      default:
-        res.status(500).json({
-          success: false,
-          error: 'Database error occurred'
-        });
-        return;
-    }
+  // Handle PostgreSQL errors
+  if (error.message.includes('duplicate key value')) {
+    res.status(400).json({
+      success: false,
+      error: 'A record with this information already exists'
+    });
+    return;
+  }
+
+  if (error.message.includes('foreign key constraint')) {
+    res.status(400).json({
+      success: false,
+      error: 'Referenced record does not exist'
+    });
+    return;
   }
 
   // Handle Zod validation errors
@@ -97,7 +81,6 @@ export const errorHandler = (
   });
 };
 
-// Async error wrapper for route handlers
 export const asyncHandler = <T extends Request, U extends Response>(
   fn: (req: T, res: U, next: NextFunction) => Promise<any>
 ) => {

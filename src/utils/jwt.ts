@@ -29,7 +29,6 @@ export const decodeToken = (token: string): JwtPayload | null => {
   }
 };
 
-// Utility function to extract token from Authorization header
 export const extractTokenFromHeader = (authHeader: string | undefined): string | null => {
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return null;

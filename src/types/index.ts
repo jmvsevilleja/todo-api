@@ -23,7 +23,7 @@ export interface LoginData {
 export interface CreateTodoData {
   title: string;
   description?: string;
-  priority?: 'LOW' | 'MEDIUM' | 'HIGH';
+  priority?: Priority;
   dueDate?: string;
 }
 
@@ -31,7 +31,7 @@ export interface UpdateTodoData {
   title?: string;
   description?: string;
   completed?: boolean;
-  priority?: 'LOW' | 'MEDIUM' | 'HIGH';
+  priority?: Priority;
   dueDate?: string;
 }
 
@@ -56,22 +56,14 @@ export interface PaginatedResponse<T> extends ApiResponse<T[]> {
 export const PRIORITY_LEVELS = ['LOW', 'MEDIUM', 'HIGH'] as const;
 export type Priority = typeof PRIORITY_LEVELS[number];
 
-export const TODO_STATUS = ['PENDING', 'COMPLETED'] as const;
-export type TodoStatus = typeof TODO_STATUS[number];
-
-// Utility types for better type manipulation
-export type TodoWithoutTimestamps = Omit<Todo, 'createdAt' | 'updatedAt'>;
-export type TodoCreateInput = Pick<Todo, 'title' | 'description' | 'priority' | 'dueDate'>;
-export type TodoUpdateInput = Partial<TodoCreateInput> & { completed?: boolean };
-
-// Database entity types (matching Prisma schema)
+// Database entity types
 export interface User {
   id: string;
   email: string;
   password: string;
   name: string | null;
-  createdAt: Date;
-  updatedAt: Date;
+  created_at: Date;
+  updated_at: Date;
 }
 
 export interface Todo {
@@ -80,13 +72,13 @@ export interface Todo {
   description: string | null;
   completed: boolean;
   priority: Priority;
-  dueDate: Date | null;
-  createdAt: Date;
-  updatedAt: Date;
-  userId: string;
+  due_date: Date | null;
+  created_at: Date;
+  updated_at: Date;
+  user_id: string;
 }
 
-// Request/Response DTOs (Data Transfer Objects)
+// Request/Response DTOs
 export interface UserResponseDto {
   id: string;
   email: string;
@@ -116,11 +108,11 @@ export interface TodoQueryParams {
   priority?: string;
   page?: string;
   limit?: string;
-  sortBy?: 'createdAt' | 'updatedAt' | 'dueDate' | 'priority';
+  sortBy?: 'created_at' | 'updated_at' | 'due_date' | 'priority';
   sortOrder?: 'asc' | 'desc';
 }
 
-// Error types for better error handling
+// Error types
 export class AppError extends Error {
   public readonly statusCode: number;
   public readonly isOperational: boolean;
@@ -129,7 +121,6 @@ export class AppError extends Error {
     super(message);
     this.statusCode = statusCode;
     this.isOperational = isOperational;
-
     Error.captureStackTrace(this, this.constructor);
   }
 }
@@ -146,23 +137,18 @@ export class AuthenticationError extends AppError {
   }
 }
 
-export class AuthorizationError extends AppError {
-  constructor(message: string = 'Access denied') {
-    super(message, 403);
-  }
-}
-
 export class NotFoundError extends AppError {
   constructor(resource: string = 'Resource') {
     super(`${resource} not found`, 404);
   }
 }
 
-// Service layer interfaces for dependency injection
+// Service interfaces
 export interface IUserService {
   createUser(userData: CreateUserData): Promise<UserResponseDto>;
   findUserByEmail(email: string): Promise<User | null>;
   findUserById(id: string): Promise<UserResponseDto | null>;
+  validatePassword(plainPassword: string, hashedPassword: string): Promise<boolean>;
 }
 
 export interface ITodoService {
@@ -172,6 +158,8 @@ export interface ITodoService {
   updateTodo(userId: string, todoId: string, updateData: UpdateTodoData): Promise<TodoResponseDto>;
   deleteTodo(userId: string, todoId: string): Promise<void>;
   toggleTodoCompletion(userId: string, todoId: string): Promise<TodoResponseDto>;
+  getTodosByPriority(userId: string, priority: Priority): Promise<TodoResponseDto[]>;
+  getOverdueTodos(userId: string): Promise<TodoResponseDto[]>;
 }
 
 export interface IAuthService {
@@ -183,15 +171,15 @@ export interface IAuthService {
 // Configuration types
 export interface DatabaseConfig {
   url: string;
-  maxConnections?: number;
-  connectionTimeout?: number;
+  maxConnections: number;
+  connectionTimeout: number;
 }
 
 export interface JwtConfig {
   secret: string;
   expiresIn: string;
-  issuer?: string;
-  audience?: string;
+  issuer: string;
+  audience: string;
 }
 
 export interface ServerConfig {
@@ -208,44 +196,30 @@ export interface AppConfig {
   jwt: JwtConfig;
 }
 
-// Middleware types
-export interface AuthenticatedRequest extends Request {
-  user: AuthUser;
-}
-
-// Type guards for runtime type checking
+// Type guards
 export const isValidPriority = (value: any): value is Priority => {
   return PRIORITY_LEVELS.includes(value);
-};
-
-export const isValidTodoStatus = (value: any): value is TodoStatus => {
-  return TODO_STATUS.includes(value);
 };
 
 export const isAppError = (error: any): error is AppError => {
   return error instanceof AppError;
 };
 
-// Branded types for better type safety
-export type UserId = string & { readonly brand: unique symbol };
-export type TodoId = string & { readonly brand: unique symbol };
-export type Email = string & { readonly brand: unique symbol };
-
-export const createUserId = (id: string): UserId => id as UserId;
-export const createTodoId = (id: string): TodoId => id as TodoId;
-export const createEmail = (email: string): Email => email as Email;
-
-// Result type for better error handling
-export type Result<T, E = Error> = 
-  | { success: true; data: T }
-  | { success: false; error: E };
-
-export const createSuccess = <T>(data: T): Result<T> => ({
-  success: true,
-  data
+// Utility functions for mapping database results
+export const mapUserToDto = (user: User): UserResponseDto => ({
+  id: user.id,
+  email: user.email,
+  name: user.name,
+  createdAt: user.created_at
 });
 
-export const createError = <E>(error: E): Result<never, E> => ({
-  success: false,
-  error
+export const mapTodoToDto = (todo: Todo): TodoResponseDto => ({
+  id: todo.id,
+  title: todo.title,
+  description: todo.description,
+  completed: todo.completed,
+  priority: todo.priority,
+  dueDate: todo.due_date,
+  createdAt: todo.created_at,
+  updatedAt: todo.updated_at
 });

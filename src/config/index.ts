@@ -40,7 +40,6 @@ export const config: AppConfig = {
   }
 };
 
-// Type-safe environment validation
 export const validateConfig = (): void => {
   if (config.server.nodeEnv === 'production' && config.jwt.secret === 'fallback-secret-change-in-production') {
     throw new Error('JWT_SECRET must be set in production environment');

@@ -3,24 +3,19 @@ import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
-import { PrismaClient } from '@prisma/client';
 
-// Import configuration and middleware
 import { config, validateConfig } from './config';
 import { errorHandler } from './middleware/errorHandler';
+import { runMigrations } from './database/migrations';
+import { db } from './database/connection';
 
-// Import routes
 import authRoutes from './routes/auth';
 import todoRoutes from './routes/todos';
 
-// Load environment variables
 dotenv.config();
-
-// Validate configuration
 validateConfig();
 
 const app = express();
-const prisma = new PrismaClient();
 
 // Security middleware
 app.use(helmet({
@@ -46,7 +41,6 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-// Rate limiting with configuration
 const limiter = rateLimit({
   windowMs: config.server.rateLimitWindowMs,
   max: config.server.rateLimitMaxRequests,
@@ -59,7 +53,6 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
-// Body parsing middleware with size limits
 app.use(express.json({ 
   limit: '10mb',
   type: ['application/json', 'text/plain']
@@ -69,29 +62,29 @@ app.use(express.urlencoded({
   limit: '10mb' 
 }));
 
-// Request logging middleware
 app.use((req, res, next) => {
   console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
   next();
 });
 
-// Health check endpoint with detailed information
-app.get('/health', (req, res) => {
-  res.json({
-    success: true,
-    message: 'Server is running',
+app.get('/health', async (req, res) => {
+  const dbHealthy = await db.healthCheck();
+  
+  res.status(dbHealthy ? 200 : 503).json({
+    success: dbHealthy,
+    message: dbHealthy ? 'Server is running' : 'Database connection failed',
     timestamp: new Date().toISOString(),
     environment: config.server.nodeEnv,
     version: process.env.npm_package_version || '1.0.0',
-    uptime: process.uptime()
+    uptime: process.uptime(),
+    database: dbHealthy ? 'connected' : 'disconnected'
   });
 });
 
-// API documentation endpoint
 app.get('/api', (req, res) => {
   res.json({
     success: true,
-    message: 'Todo API v1.0',
+    message: 'Todo API v1.0 - PostgreSQL Direct',
     endpoints: {
       auth: {
         register: 'POST /api/auth/register',
@@ -112,14 +105,11 @@ app.get('/api', (req, res) => {
   });
 });
 
-// API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/todos', todoRoutes);
 
-// Global error handler (must be after routes)
 app.use(errorHandler);
 
-// 404 handler
 app.use('*', (req, res) => {
   res.status(404).json({
     success: false,
@@ -129,12 +119,11 @@ app.use('*', (req, res) => {
   });
 });
 
-// Graceful shutdown handlers
 const gracefulShutdown = async (signal: string) => {
   console.log(`${signal} received. Shutting down gracefully...`);
   
   try {
-    await prisma.$disconnect();
+    await db.close();
     console.log('Database connection closed.');
     process.exit(0);
   } catch (error) {
@@ -146,7 +135,6 @@ const gracefulShutdown = async (signal: string) => {
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 
-// Handle uncaught exceptions
 process.on('uncaughtException', (error) => {
   console.error('Uncaught Exception:', error);
   process.exit(1);
@@ -157,12 +145,32 @@ process.on('unhandledRejection', (reason, promise) => {
   process.exit(1);
 });
 
-// Start server
-app.listen(config.server.port, () => {
-  console.log(`🚀 Server running on http://localhost:${config.server.port}`);
-  console.log(`📚 Health check: http://localhost:${config.server.port}/health`);
-  console.log(`📖 API docs: http://localhost:${config.server.port}/api`);
-  console.log(`🔐 Auth endpoints: http://localhost:${config.server.port}/api/auth`);
-  console.log(`📝 Todo endpoints: http://localhost:${config.server.port}/api/todos`);
-  console.log(`🌍 Environment: ${config.server.nodeEnv}`);
-});
+// Initialize database and start server
+async function startServer() {
+  try {
+    console.log('🔄 Running database migrations...');
+    await runMigrations();
+    
+    console.log('🔄 Testing database connection...');
+    const isHealthy = await db.healthCheck();
+    
+    if (!isHealthy) {
+      throw new Error('Database connection failed');
+    }
+
+    app.listen(config.server.port, () => {
+      console.log(`🚀 Server running on http://localhost:${config.server.port}`);
+      console.log(`📚 Health check: http://localhost:${config.server.port}/health`);
+      console.log(`📖 API docs: http://localhost:${config.server.port}/api`);
+      console.log(`🔐 Auth endpoints: http://localhost:${config.server.port}/api/auth`);
+      console.log(`📝 Todo endpoints: http://localhost:${config.server.port}/api/todos`);
+      console.log(`🌍 Environment: ${config.server.nodeEnv}`);
+      console.log(`🗄️  Database: PostgreSQL (Direct Connection)`);
+    });
+  } catch (error) {
+    console.error('Failed to start server:', error);
+    process.exit(1);
+  }
+}
+
+startServer();

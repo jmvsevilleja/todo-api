@@ -5,8 +5,7 @@ import {
   LoginData, 
   AuthResponseDto, 
   AuthUser,
-  AuthenticationError,
-  ValidationError
+  AuthenticationError
 } from '../types';
 import { generateToken, verifyToken } from '../utils/jwt';
 
@@ -53,7 +52,7 @@ export class AuthService implements IAuthService {
         id: user.id,
         email: user.email,
         name: user.name,
-        createdAt: user.createdAt
+        createdAt: user.created_at
       },
       token
     };

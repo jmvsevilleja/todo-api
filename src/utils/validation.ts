@@ -1,7 +1,7 @@
 import { z } from 'zod';
+import { Request, Response, NextFunction } from 'express';
 import { PRIORITY_LEVELS } from '../types';
 
-// Enhanced validation schemas with better error messages
 export const registerSchema = z.object({
   email: z
     .string()
@@ -123,14 +123,13 @@ export const todoQuerySchema = z.object({
       message: 'Limit must be a positive number between 1 and 100'
     }),
   sortBy: z
-    .enum(['createdAt', 'updatedAt', 'dueDate', 'priority'])
+    .enum(['created_at', 'updated_at', 'due_date', 'priority'])
     .optional(),
   sortOrder: z
     .enum(['asc', 'desc'])
     .optional()
 });
 
-// Validation middleware factory
 export const validateBody = <T>(schema: z.ZodSchema<T>) => {
   return (req: Request, res: Response, next: NextFunction): void => {
     try {
@@ -151,13 +150,4 @@ export const validateQuery = <T>(schema: z.ZodSchema<T>) => {
       next(error);
     }
   };
-};
-
-// Custom validation functions
-export const isValidObjectId = (id: string): boolean => {
-  return typeof id === 'string' && id.length > 0;
-};
-
-export const sanitizeString = (str: string): string => {
-  return str.trim().replace(/\s+/g, ' ');
 };

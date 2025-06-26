@@ -1,5 +1,4 @@
 import { Router } from 'express';
-import { PrismaClient } from '@prisma/client';
 import { AuthService } from '../services/AuthService';
 import { UserService } from '../services/UserService';
 import { registerSchema, loginSchema, validateBody } from '../utils/validation';
@@ -7,11 +6,9 @@ import { asyncHandler } from '../middleware/errorHandler';
 import { ApiResponse, AuthResponseDto } from '../types';
 
 const router = Router();
-const prisma = new PrismaClient();
-const userService = new UserService(prisma);
+const userService = new UserService();
 const authService = new AuthService(userService);
 
-// Register endpoint with enhanced type safety
 router.post('/register', 
   validateBody(registerSchema),
   asyncHandler(async (req, res): Promise<void> => {
@@ -27,7 +24,6 @@ router.post('/register',
   })
 );
 
-// Login endpoint with enhanced type safety
 router.post('/login',
   validateBody(loginSchema),
   asyncHandler(async (req, res): Promise<void> => {
@@ -43,7 +39,6 @@ router.post('/login',
   })
 );
 
-// Token verification endpoint
 router.get('/verify',
   asyncHandler(async (req, res): Promise<void> => {
     const authHeader = req.headers.authorization;

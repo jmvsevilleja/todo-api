@@ -1,5 +1,4 @@
 import { Router } from 'express';
-import { PrismaClient } from '@prisma/client';
 import { TodoService } from '../services/TodoService';
 import { authenticateToken } from '../middleware/auth';
 import { 
@@ -13,18 +12,14 @@ import { asyncHandler } from '../middleware/errorHandler';
 import { 
   ApiResponse, 
   TodoResponseDto, 
-  PaginatedResponse,
   TodoQueryParams 
 } from '../types';
 
 const router = Router();
-const prisma = new PrismaClient();
-const todoService = new TodoService(prisma);
+const todoService = new TodoService();
 
-// Apply authentication middleware to all routes
 router.use(authenticateToken);
 
-// Get all todos with enhanced filtering and pagination
 router.get('/',
   validateQuery(todoQuerySchema),
   asyncHandler(async (req, res): Promise<void> => {
@@ -36,7 +31,6 @@ router.get('/',
   })
 );
 
-// Get single todo with type safety
 router.get('/:id',
   asyncHandler(async (req, res): Promise<void> => {
     const { id } = req.params;
@@ -53,7 +47,6 @@ router.get('/:id',
   })
 );
 
-// Create new todo with validation
 router.post('/',
   validateBody(createTodoSchema),
   asyncHandler(async (req, res): Promise<void> => {
@@ -70,7 +63,6 @@ router.post('/',
   })
 );
 
-// Update todo with validation
 router.put('/:id',
   validateBody(updateTodoSchema),
   asyncHandler(async (req, res): Promise<void> => {
@@ -89,7 +81,6 @@ router.put('/:id',
   })
 );
 
-// Delete todo
 router.delete('/:id',
   asyncHandler(async (req, res): Promise<void> => {
     const { id } = req.params;
@@ -106,7 +97,6 @@ router.delete('/:id',
   })
 );
 
-// Toggle todo completion
 router.patch('/:id/toggle',
   asyncHandler(async (req, res): Promise<void> => {
     const { id } = req.params;
@@ -124,7 +114,6 @@ router.patch('/:id/toggle',
   })
 );
 
-// Get todos by priority
 router.get('/priority/:priority',
   asyncHandler(async (req, res): Promise<void> => {
     const { priority } = req.params;
@@ -144,7 +133,6 @@ router.get('/priority/:priority',
   })
 );
 
-// Get overdue todos
 router.get('/status/overdue',
   asyncHandler(async (req, res): Promise<void> => {
     const userId = req.user!.id;
