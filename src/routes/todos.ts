@@ -2,19 +2,19 @@ import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { TodoService } from '../services/TodoService';
 import { authenticateToken } from '../middleware/auth';
-import { 
-  createTodoSchema, 
-  updateTodoSchema, 
+import {
+  createTodoSchema,
+  updateTodoSchema,
   todoQuerySchema,
-  validateBody, 
-  validateQuery 
+  validateBody,
+  validateQuery
 } from '../utils/validation';
 import { asyncHandler } from '../middleware/errorHandler';
-import { 
-  ApiResponse, 
-  TodoResponseDto, 
+import {
+  ApiResponse,
+  TodoResponseDto,
   PaginatedResponse,
-  TodoQueryParams 
+  TodoQueryParams
 } from '../types';
 
 const router = Router();
@@ -131,7 +131,7 @@ router.get('/priority/:priority',
     const userId = req.user!.id;
 
     const todos = await todoService.getTodosByPriority(
-      userId, 
+      userId,
       priority.toUpperCase() as any
     );
 

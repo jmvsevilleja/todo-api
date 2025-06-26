@@ -23,7 +23,7 @@ export interface LoginData {
 export interface CreateTodoData {
   title: string;
   description?: string;
-  priority?: 'LOW' | 'MEDIUM' | 'HIGH';
+  priority?: Priority;
   dueDate?: string;
 }
 
@@ -31,7 +31,7 @@ export interface UpdateTodoData {
   title?: string;
   description?: string;
   completed?: boolean;
-  priority?: 'LOW' | 'MEDIUM' | 'HIGH';
+  priority?: Priority;
   dueDate?: string;
 }
 
@@ -236,7 +236,7 @@ export const createTodoId = (id: string): TodoId => id as TodoId;
 export const createEmail = (email: string): Email => email as Email;
 
 // Result type for better error handling
-export type Result<T, E = Error> = 
+export type Result<T, E = Error> =
   | { success: true; data: T }
   | { success: false; error: E };
 

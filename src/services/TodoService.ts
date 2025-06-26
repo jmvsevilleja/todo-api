@@ -1,14 +1,15 @@
 import { PrismaClient, Prisma } from '@prisma/client';
-import { 
-  ITodoService, 
-  CreateTodoData, 
-  UpdateTodoData, 
-  TodoResponseDto, 
+import {
+  ITodoService,
+  CreateTodoData,
+  UpdateTodoData,
+  TodoResponseDto,
   TodoQueryParams,
   PaginatedResponse,
   NotFoundError,
   ValidationError,
   Priority,
+  PRIORITY_LEVELS,
   isValidPriority
 } from '../types';
 
@@ -18,8 +19,8 @@ export class TodoService implements ITodoService {
   async createTodo(userId: string, todoData: CreateTodoData): Promise<TodoResponseDto> {
     const data: Prisma.TodoCreateInput = {
       title: todoData.title,
-      description: todoData.description,
-      priority: todoData.priority || 'MEDIUM',
+      description: todoData.description || null,
+      priority: todoData.priority || PRIORITY_LEVELS[1], // 'MEDIUM'
       dueDate: todoData.dueDate ? new Date(todoData.dueDate) : null,
       user: {
         connect: { id: userId }
@@ -61,7 +62,7 @@ export class TodoService implements ITodoService {
 
     // Build orderBy clause
     const orderBy: Prisma.TodoOrderByWithRelationInput[] = [];
-    
+
     if (params.sortBy && params.sortOrder) {
       const validSortFields = ['createdAt', 'updatedAt', 'dueDate', 'priority'];
       if (validSortFields.includes(params.sortBy)) {
@@ -223,7 +224,7 @@ export class TodoService implements ITodoService {
 
   async getOverdueTodos(userId: string): Promise<TodoResponseDto[]> {
     const now = new Date();
-    
+
     return this.prisma.todo.findMany({
       where: {
         userId,
