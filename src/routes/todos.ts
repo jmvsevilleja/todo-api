@@ -14,7 +14,8 @@ import {
   ApiResponse,
   TodoResponseDto,
   PaginatedResponse,
-  TodoQueryParams
+  TodoQueryParams,
+  HTTP_STATUS
 } from '../types';
 
 const router = Router();
@@ -32,24 +33,29 @@ router.get('/',
     const queryParams = req.query as TodoQueryParams;
 
     const result = await todoService.getTodos(userId, queryParams);
-    res.json(result);
+
+    res.status(HTTP_STATUS.OK).json({
+      ...result,
+      timestamp: new Date().toISOString()
+    });
   })
 );
 
 // Get single todo with type safety
 router.get('/:id',
   asyncHandler(async (req, res): Promise<void> => {
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
     const userId = req.user!.id;
 
     const todo = await todoService.getTodoById(userId, id);
 
     const response: ApiResponse<TodoResponseDto> = {
       success: true,
-      data: todo
+      data: todo,
+      timestamp: new Date().toISOString()
     };
 
-    res.json(response);
+    res.status(HTTP_STATUS.OK).json(response);
   })
 );
 
@@ -63,10 +69,11 @@ router.post('/',
     const response: ApiResponse<TodoResponseDto> = {
       success: true,
       data: todo,
-      message: 'Todo created successfully'
+      message: 'Todo created successfully',
+      timestamp: new Date().toISOString()
     };
 
-    res.status(201).json(response);
+    res.status(HTTP_STATUS.CREATED).json(response);
   })
 );
 
@@ -74,7 +81,7 @@ router.post('/',
 router.put('/:id',
   validateBody(updateTodoSchema),
   asyncHandler(async (req, res): Promise<void> => {
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
     const userId = req.user!.id;
 
     const todo = await todoService.updateTodo(userId, id, req.body);
@@ -82,34 +89,36 @@ router.put('/:id',
     const response: ApiResponse<TodoResponseDto> = {
       success: true,
       data: todo,
-      message: 'Todo updated successfully'
+      message: 'Todo updated successfully',
+      timestamp: new Date().toISOString()
     };
 
-    res.json(response);
+    res.status(HTTP_STATUS.OK).json(response);
   })
 );
 
 // Delete todo
 router.delete('/:id',
   asyncHandler(async (req, res): Promise<void> => {
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
     const userId = req.user!.id;
 
     await todoService.deleteTodo(userId, id);
 
     const response: ApiResponse = {
       success: true,
-      message: 'Todo deleted successfully'
+      message: 'Todo deleted successfully',
+      timestamp: new Date().toISOString()
     };
 
-    res.json(response);
+    res.status(HTTP_STATUS.OK).json(response);
   })
 );
 
 // Toggle todo completion
 router.patch('/:id/toggle',
   asyncHandler(async (req, res): Promise<void> => {
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
     const userId = req.user!.id;
 
     const todo = await todoService.toggleTodoCompletion(userId, id);
@@ -117,17 +126,18 @@ router.patch('/:id/toggle',
     const response: ApiResponse<TodoResponseDto> = {
       success: true,
       data: todo,
-      message: `Todo marked as ${todo.completed ? 'completed' : 'pending'}`
+      message: `Todo marked as ${todo.completed ? 'completed' : 'pending'}`,
+      timestamp: new Date().toISOString()
     };
 
-    res.json(response);
+    res.status(HTTP_STATUS.OK).json(response);
   })
 );
 
 // Get todos by priority
 router.get('/priority/:priority',
   asyncHandler(async (req, res): Promise<void> => {
-    const { priority } = req.params;
+    const { priority } = req.params as { priority: string };
     const userId = req.user!.id;
 
     const todos = await todoService.getTodosByPriority(
@@ -137,10 +147,11 @@ router.get('/priority/:priority',
 
     const response: ApiResponse<TodoResponseDto[]> = {
       success: true,
-      data: todos
+      data: todos,
+      timestamp: new Date().toISOString()
     };
 
-    res.json(response);
+    res.status(HTTP_STATUS.OK).json(response);
   })
 );
 
@@ -152,10 +163,45 @@ router.get('/status/overdue',
 
     const response: ApiResponse<TodoResponseDto[]> = {
       success: true,
-      data: todos
+      data: todos,
+      timestamp: new Date().toISOString()
     };
 
-    res.json(response);
+    res.status(HTTP_STATUS.OK).json(response);
+  })
+);
+
+// Get todo statistics
+router.get('/stats',
+  asyncHandler(async (req, res): Promise<void> => {
+    const userId = req.user!.id;
+    const stats = await todoService.getTodoStats(userId);
+
+    const response: ApiResponse = {
+      success: true,
+      data: stats,
+      timestamp: new Date().toISOString()
+    };
+
+    res.status(HTTP_STATUS.OK).json(response);
+  })
+);
+
+// Search todos
+router.get('/search/:term',
+  asyncHandler(async (req, res): Promise<void> => {
+    const { term } = req.params as { term: string };
+    const userId = req.user!.id;
+
+    const todos = await todoService.searchTodos(userId, term);
+
+    const response: ApiResponse<TodoResponseDto[]> = {
+      success: true,
+      data: todos,
+      timestamp: new Date().toISOString()
+    };
+
+    res.status(HTTP_STATUS.OK).json(response);
   })
 );
 

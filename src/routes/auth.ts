@@ -4,7 +4,7 @@ import { AuthService } from '../services/AuthService';
 import { UserService } from '../services/UserService';
 import { registerSchema, loginSchema, validateBody } from '../utils/validation';
 import { asyncHandler } from '../middleware/errorHandler';
-import { ApiResponse, AuthResponseDto } from '../types';
+import { ApiResponse, AuthResponseDto, HTTP_STATUS } from '../types';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -20,10 +20,11 @@ router.post('/register',
     const response: ApiResponse<AuthResponseDto> = {
       success: true,
       data: authResponse,
-      message: 'User registered successfully'
+      message: 'User registered successfully',
+      timestamp: new Date().toISOString()
     };
 
-    res.status(201).json(response);
+    res.status(HTTP_STATUS.CREATED).json(response);
   })
 );
 
@@ -36,10 +37,11 @@ router.post('/login',
     const response: ApiResponse<AuthResponseDto> = {
       success: true,
       data: authResponse,
-      message: 'Login successful'
+      message: 'Login successful',
+      timestamp: new Date().toISOString()
     };
 
-    res.json(response);
+    res.status(HTTP_STATUS.OK).json(response);
   })
 );
 
@@ -50,9 +52,10 @@ router.get('/verify',
     const token = authHeader && authHeader.split(' ')[1];
 
     if (!token) {
-      res.status(401).json({
+      res.status(HTTP_STATUS.UNAUTHORIZED).json({
         success: false,
-        error: 'Access token required'
+        error: 'Access token required',
+        timestamp: new Date().toISOString()
       });
       return;
     }
@@ -62,10 +65,11 @@ router.get('/verify',
     const response: ApiResponse = {
       success: true,
       data: { user },
-      message: 'Token is valid'
+      message: 'Token is valid',
+      timestamp: new Date().toISOString()
     };
 
-    res.json(response);
+    res.status(HTTP_STATUS.OK).json(response);
   })
 );
 

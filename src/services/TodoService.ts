@@ -7,11 +7,12 @@ import {
   TodoQueryParams,
   PaginatedResponse,
   NotFoundError,
-  ValidationError,
   Priority,
-  PRIORITY_LEVELS,
-  isValidPriority
+  TodoStats,
+  isValidPriority,
+  PAGINATION
 } from '../types';
+import { createPaginatedResponse } from '../utils/mappers';
 
 export class TodoService implements ITodoService {
   constructor(private readonly prisma: PrismaClient) {}
@@ -20,7 +21,7 @@ export class TodoService implements ITodoService {
     const data: Prisma.TodoCreateInput = {
       title: todoData.title,
       description: todoData.description || null,
-      priority: todoData.priority || PRIORITY_LEVELS[1], // 'MEDIUM'
+      priority: todoData.priority || 'MEDIUM',
       dueDate: todoData.dueDate ? new Date(todoData.dueDate) : null,
       user: {
         connect: { id: userId }
@@ -45,8 +46,8 @@ export class TodoService implements ITodoService {
   }
 
   async getTodos(userId: string, params: TodoQueryParams): Promise<PaginatedResponse<TodoResponseDto>> {
-    const page = parseInt(params.page || '1', 10);
-    const limit = Math.min(parseInt(params.limit || '10', 10), 100); // Max 100 items per page
+    const page = parseInt(params.page || PAGINATION.DEFAULT_PAGE.toString(), 10);
+    const limit = Math.min(parseInt(params.limit || PAGINATION.DEFAULT_LIMIT.toString(), 10), PAGINATION.MAX_LIMIT);
     const skip = (page - 1) * limit;
 
     // Build where clause
@@ -60,16 +61,20 @@ export class TodoService implements ITodoService {
       where.priority = params.priority.toUpperCase() as Priority;
     }
 
+    if (params.search) {
+      where.OR = [
+        { title: { contains: params.search, mode: 'insensitive' } },
+        { description: { contains: params.search, mode: 'insensitive' } }
+      ];
+    }
+
     // Build orderBy clause
     const orderBy: Prisma.TodoOrderByWithRelationInput[] = [];
 
     if (params.sortBy && params.sortOrder) {
-      const validSortFields = ['createdAt', 'updatedAt', 'dueDate', 'priority'];
-      if (validSortFields.includes(params.sortBy)) {
-        orderBy.push({
-          [params.sortBy]: params.sortOrder
-        });
-      }
+      orderBy.push({
+        [params.sortBy]: params.sortOrder
+      });
     }
 
     // Default sorting
@@ -98,18 +103,7 @@ export class TodoService implements ITodoService {
       this.prisma.todo.count({ where })
     ]);
 
-    const totalPages = Math.ceil(total / limit);
-
-    return {
-      success: true,
-      data: todos,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages
-      }
-    };
+    return createPaginatedResponse(todos, page, limit, total);
   }
 
   async getTodoById(userId: string, todoId: string): Promise<TodoResponseDto> {
@@ -201,7 +195,6 @@ export class TodoService implements ITodoService {
     return todo;
   }
 
-  // Advanced query methods with type safety
   async getTodosByPriority(userId: string, priority: Priority): Promise<TodoResponseDto[]> {
     return this.prisma.todo.findMany({
       where: {
@@ -245,5 +238,68 @@ export class TodoService implements ITodoService {
       },
       orderBy: { dueDate: 'asc' }
     });
+  }
+
+  async searchTodos(userId: string, searchTerm: string): Promise<TodoResponseDto[]> {
+    return this.prisma.todo.findMany({
+      where: {
+        userId,
+        OR: [
+          { title: { contains: searchTerm, mode: 'insensitive' } },
+          { description: { contains: searchTerm, mode: 'insensitive' } }
+        ]
+      },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        completed: true,
+        priority: true,
+        dueDate: true,
+        createdAt: true,
+        updatedAt: true
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+  }
+
+  async getTodoStats(userId: string): Promise<TodoStats> {
+    const now = new Date();
+
+    const [total, completed, pending, overdue, priorityStats] = await Promise.all([
+      this.prisma.todo.count({ where: { userId } }),
+      this.prisma.todo.count({ where: { userId, completed: true } }),
+      this.prisma.todo.count({ where: { userId, completed: false } }),
+      this.prisma.todo.count({
+        where: {
+          userId,
+          completed: false,
+          dueDate: { lt: now }
+        }
+      }),
+      this.prisma.todo.groupBy({
+        by: ['priority'],
+        where: { userId },
+        _count: { priority: true }
+      })
+    ]);
+
+    const byPriority = {
+      LOW: 0,
+      MEDIUM: 0,
+      HIGH: 0
+    };
+
+    priorityStats.forEach(stat => {
+      byPriority[stat.priority] = stat._count.priority;
+    });
+
+    return {
+      total,
+      completed,
+      pending,
+      overdue,
+      byPriority
+    };
   }
 }

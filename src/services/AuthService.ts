@@ -1,14 +1,14 @@
-import { 
-  IAuthService, 
-  IUserService, 
-  CreateUserData, 
-  LoginData, 
-  AuthResponseDto, 
+import {
+  IAuthService,
+  IUserService,
+  CreateUserData,
+  LoginData,
+  AuthResponseDto,
   AuthUser,
   AuthenticationError,
-  ValidationError
-} from '../types';
-import { generateToken, verifyToken } from '../utils/jwt';
+  ValidationError,
+} from "../types";
+import { generateToken, verifyToken } from "../utils/jwt";
 
 export class AuthService implements IAuthService {
   constructor(private readonly userService: IUserService) {}
@@ -18,12 +18,12 @@ export class AuthService implements IAuthService {
 
     const token = generateToken({
       userId: user.id,
-      email: user.email
+      email: user.email,
     });
 
     return {
       user,
-      token
+      token,
     };
   }
 
@@ -31,21 +31,21 @@ export class AuthService implements IAuthService {
     const user = await this.userService.findUserByEmail(loginData.email);
 
     if (!user) {
-      throw new AuthenticationError('Invalid credentials');
+      throw new AuthenticationError("Invalid credentials");
     }
 
     const isPasswordValid = await this.userService.validatePassword(
-      loginData.password, 
+      loginData.password,
       user.password
     );
 
     if (!isPasswordValid) {
-      throw new AuthenticationError('Invalid credentials');
+      throw new AuthenticationError("Invalid credentials");
     }
 
     const token = generateToken({
       userId: user.id,
-      email: user.email
+      email: user.email,
     });
 
     return {
@@ -53,29 +53,39 @@ export class AuthService implements IAuthService {
         id: user.id,
         email: user.email,
         name: user.name,
-        createdAt: user.createdAt
+        createdAt: user.createdAt,
       },
-      token
+      token,
     };
   }
 
   async verifyToken(token: string): Promise<AuthUser> {
     try {
       const decoded = verifyToken(token);
-      
+
       const user = await this.userService.findUserById(decoded.userId);
-      
+
       if (!user) {
-        throw new AuthenticationError('User not found');
+        throw new AuthenticationError("User not found");
       }
 
       return {
         id: user.id,
         email: user.email,
-        name: user.name
+        name: user.name,
       };
     } catch (error) {
-      throw new AuthenticationError('Invalid or expired token');
+      throw new AuthenticationError("Invalid or expired token");
     }
+  }
+
+  async refreshToken(refreshToken: string): Promise<AuthResponseDto> {
+    // Implementation for refresh token logic
+    throw new Error("Refresh token not implemented yet");
+  }
+
+  async logout(token: string): Promise<void> {
+    // Implementation for token blacklisting
+    throw new Error("Logout not implemented yet");
   }
 }

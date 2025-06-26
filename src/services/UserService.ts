@@ -1,11 +1,11 @@
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
-import { 
-  IUserService, 
-  CreateUserData, 
-  UserResponseDto, 
+import {
+  IUserService,
+  CreateUserData,
+  UserResponseDto,
   User,
-  ValidationError,
+  ConflictError,
   NotFoundError,
   Result,
   createSuccess,
@@ -17,9 +17,9 @@ export class UserService implements IUserService {
 
   async createUser(userData: CreateUserData): Promise<UserResponseDto> {
     const existingUser = await this.findUserByEmail(userData.email);
-    
+
     if (existingUser) {
-      throw new ValidationError('User with this email already exists');
+      throw new ConflictError('User with this email already exists');
     }
 
     const hashedPassword = await bcrypt.hash(userData.password, 12);
@@ -28,7 +28,7 @@ export class UserService implements IUserService {
       data: {
         email: userData.email,
         password: hashedPassword,
-        name: userData.name
+        name: userData.name || null
       },
       select: {
         id: true,
@@ -61,6 +61,59 @@ export class UserService implements IUserService {
     return user;
   }
 
+  async updateUser(id: string, updateData: Partial<CreateUserData>): Promise<UserResponseDto> {
+    const existingUser = await this.findUserById(id);
+    if (!existingUser) {
+      throw new NotFoundError('User');
+    }
+
+    const data: any = {};
+
+    if (updateData.name !== undefined) {
+      data.name = updateData.name;
+    }
+
+    if (updateData.password) {
+      data.password = await bcrypt.hash(updateData.password, 12);
+    }
+
+    if (updateData.email && updateData.email !== existingUser.email) {
+      const emailExists = await this.findUserByEmail(updateData.email);
+      if (emailExists) {
+        throw new ConflictError('Email already in use');
+      }
+      data.email = updateData.email;
+    }
+
+    const user = await this.prisma.user.update({
+      where: { id },
+      data,
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        createdAt: true
+      }
+    });
+
+    return user;
+  }
+
+  async deleteUser(id: string): Promise<void> {
+    const user = await this.findUserById(id);
+    if (!user) {
+      throw new NotFoundError('User');
+    }
+
+    await this.prisma.user.delete({
+      where: { id }
+    });
+  }
+
+  async validatePassword(plainPassword: string, hashedPassword: string): Promise<boolean> {
+    return bcrypt.compare(plainPassword, hashedPassword);
+  }
+
   // Using Result type for better error handling
   async findUserByEmailSafe(email: string): Promise<Result<User | null>> {
     try {
@@ -69,9 +122,5 @@ export class UserService implements IUserService {
     } catch (error) {
       return createError(error as Error);
     }
-  }
-
-  async validatePassword(plainPassword: string, hashedPassword: string): Promise<boolean> {
-    return bcrypt.compare(plainPassword, hashedPassword);
   }
 }

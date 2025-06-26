@@ -1,5 +1,7 @@
 import { z } from 'zod';
-import { PRIORITY_LEVELS } from '../types';
+import { Request, Response, NextFunction } from 'express';
+import { PRIORITY_LEVELS, TODO_SORT_FIELDS, SORT_ORDERS } from '../types/constants';
+import { ValidationError } from '../types/errors';
 
 // Enhanced validation schemas with better error messages
 export const registerSchema = z.object({
@@ -7,19 +9,21 @@ export const registerSchema = z.object({
     .string()
     .email('Please provide a valid email address')
     .min(1, 'Email is required')
-    .max(255, 'Email is too long'),
+    .max(255, 'Email is too long')
+    .toLowerCase(),
   password: z
     .string()
-    .min(6, 'Password must be at least 6 characters long')
+    .min(8, 'Password must be at least 8 characters long')
     .max(128, 'Password is too long')
     .regex(
-      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/,
-      'Password must contain at least one lowercase letter, one uppercase letter, and one number'
+      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/,
+      'Password must contain at least one lowercase letter, one uppercase letter, one number, and one special character'
     ),
   name: z
     .string()
     .min(1, 'Name cannot be empty')
     .max(100, 'Name is too long')
+    .trim()
     .optional()
     .or(z.literal(''))
 });
@@ -28,7 +32,8 @@ export const loginSchema = z.object({
   email: z
     .string()
     .email('Please provide a valid email address')
-    .min(1, 'Email is required'),
+    .min(1, 'Email is required')
+    .toLowerCase(),
   password: z
     .string()
     .min(1, 'Password is required')
@@ -43,6 +48,7 @@ export const createTodoSchema = z.object({
   description: z
     .string()
     .max(1000, 'Description cannot exceed 1000 characters')
+    .trim()
     .optional()
     .or(z.literal('')),
   priority: z
@@ -67,6 +73,7 @@ export const updateTodoSchema = z.object({
   description: z
     .string()
     .max(1000, 'Description cannot exceed 1000 characters')
+    .trim()
     .optional()
     .or(z.literal('')),
   completed: z
@@ -123,21 +130,31 @@ export const todoQuerySchema = z.object({
       message: 'Limit must be a positive number between 1 and 100'
     }),
   sortBy: z
-    .enum(['createdAt', 'updatedAt', 'dueDate', 'priority'])
+    .enum(TODO_SORT_FIELDS)
     .optional(),
   sortOrder: z
-    .enum(['asc', 'desc'])
+    .enum(SORT_ORDERS)
+    .optional(),
+  search: z
+    .string()
+    .min(1, 'Search term cannot be empty')
+    .max(100, 'Search term is too long')
+    .trim()
     .optional()
 });
 
-// Validation middleware factory
+// Validation middleware factories
 export const validateBody = <T>(schema: z.ZodSchema<T>) => {
   return (req: Request, res: Response, next: NextFunction): void => {
     try {
       req.body = schema.parse(req.body);
       next();
     } catch (error) {
-      next(error);
+      if (error instanceof z.ZodError) {
+        next(new ValidationError('Validation failed', error.errors));
+      } else {
+        next(error);
+      }
     }
   };
 };
@@ -148,7 +165,26 @@ export const validateQuery = <T>(schema: z.ZodSchema<T>) => {
       req.query = schema.parse(req.query);
       next();
     } catch (error) {
-      next(error);
+      if (error instanceof z.ZodError) {
+        next(new ValidationError('Query validation failed', error.errors));
+      } else {
+        next(error);
+      }
+    }
+  };
+};
+
+export const validateParams = <T>(schema: z.ZodSchema<T>) => {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    try {
+      req.params = schema.parse(req.params);
+      next();
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        next(new ValidationError('Parameter validation failed', error.errors));
+      } else {
+        next(error);
+      }
     }
   };
 };
@@ -160,4 +196,9 @@ export const isValidObjectId = (id: string): boolean => {
 
 export const sanitizeString = (str: string): string => {
   return str.trim().replace(/\s+/g, ' ');
+};
+
+export const isStrongPassword = (password: string): boolean => {
+  const strongPasswordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+  return strongPasswordRegex.test(password);
 };
